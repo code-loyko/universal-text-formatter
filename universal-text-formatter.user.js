@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Text Formatter
 // @namespace    https://github.com/code-loyko/
-// @version      1.0
+// @version      1.1
 // @description  Apply Bold and Italic styles to any text field.
 // @author       Loyko
 // @match        *://*/*
@@ -58,12 +58,13 @@
         event.stopImmediatePropagation();
 
         // 1. Analyze selection for toggle behavior
-        const charDataList = [...text].map(c => getCharData(c.codePointAt(0)));
+        const chars = [...text];
+        const charDataList = chars.map(c => getCharData(c.codePointAt(0)));
         const shouldApply = charDataList.some(d => d && (d.style & styleBit) === 0);
 
         // 2. Build transformed string
         const result = charDataList.map((data, index) => {
-            if (!data || (data.type === 'DIGIT' && styleBit === 2)) return [...text][index];
+            if (!data || (data.type === 'DIGIT' && styleBit === 2)) return chars[index];
             const newStyle = shouldApply ? (data.style | styleBit) : (data.style & ~styleBit);
             return String.fromCodePoint(data.base + OFFSETS[data.type][newStyle]);
         }).join('');
@@ -72,19 +73,18 @@
         document.execCommand('insertText', false, result);
 
         // 4. Restore selection across line breaks and complex DOM nodes
-        const targetLen = [...result].length;
-        let currentLen = 0;
+        const targetLen = result.length;
         let safety = 0;
 
-        while (currentLen < targetLen && safety < targetLen + 20) {
-            const prevLen = currentLen;
+        while (selection.toString().length < targetLen && safety < targetLen + 20) {
+            const prevLen = selection.toString().length;
             selection.modify('extend', 'backward', 'character');
-            currentLen = [...selection.toString()].length;
 
             // Handle line breaks or editor boundaries
-            if (currentLen === prevLen) {
-                selection.modify('extend', 'backward', 'lineboundary');
-                currentLen = [...selection.toString()].length;
+            if (selection.toString().length === prevLen) {
+                selection.modify('extend', 'backward', 'character');
+                // If still stalled after a second attempt, we've reached the start of the field
+                if (selection.toString().length === prevLen) break;
             }
             safety++;
         }
